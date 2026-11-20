@@ -243,7 +243,7 @@ footer .big{font-size:42px;font-weight:800;color:var(--fg);margin-bottom:18px;le
     <span class="eyebrow">Install</span>
     <h2>Three steps.</h2>
     <div class="steps">
-      <div class="step"><h3>Download</h3><p>Get <kbd>foxnotch.exe</kbd>. No installer.</p></div>
+      <div class="step"><h3>Download</h3><p>Get <kbd>Foxy.exe</kbd>. No installer.</p></div>
       <div class="step"><h3>Run it</h3><p>Foxy isn't signed, so Windows may warn you. Click <kbd>More info</kbd> → <kbd>Run anyway</kbd>.</p></div>
       <div class="step"><h3>Say hi</h3><p>Foxy shows up at the top of your screen. Right click the tray icon for settings.</p></div>
     </div>
@@ -267,7 +267,7 @@ footer .big{font-size:42px;font-weight:800;color:var(--fg);margin-bottom:18px;le
 
 <script>
 const OWNER = "Spurciu5", REPO = "foxy-updates";
-const exe = `https://github.com/${OWNER}/${REPO}/releases/latest/download/foxnotch.exe`;
+const exe = `https://github.com/${OWNER}/${REPO}/releases/latest/download/Foxy.exe`;
 for (const id of ["dl", "dl2"]) document.getElementById(id).href = exe;
 document.getElementById("gh").href = `https://github.com/${OWNER}/${REPO}/releases`;
 fetch(`https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`).then(r => r.ok ? r.json() : null)
