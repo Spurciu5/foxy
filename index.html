@@ -168,6 +168,24 @@ h2{font-size:clamp(34px,4.5vw,52px);line-height:1.05;letter-spacing:-1px;margin:
 .cycle-wrap::before{content:"";position:absolute;inset:10%;border-radius:50%;background:radial-gradient(circle,rgba(255,140,60,.22),transparent 65%)}
 .panel .label{color:var(--dim);font-size:14px}
 
+/* Friend code */
+.code{display:inline-flex;align-items:center;gap:14px;margin-top:26px;background:var(--card);border:1px solid rgba(255,140,60,.3);border-radius:18px;padding:12px 12px 12px 20px}
+.code small{display:block;color:var(--dim);font-size:12px}
+.code b{font-size:22px;letter-spacing:1.5px;font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
+.copy{border:none;background:var(--fox);color:#1b0f06;font:inherit;font-weight:600;font-size:14px;padding:9px 16px;border-radius:12px;cursor:pointer;min-width:84px}
+.copy:hover{filter:brightness(1.08)}
+/* Feedback */
+.fb{display:grid;gap:12px;margin-top:30px;max-width:640px}
+.fb textarea,.fb input{width:100%;background:var(--card);border:1px solid var(--line);border-radius:16px;color:var(--fg);font:inherit;padding:14px 16px;outline:none;transition:border-color .2s}
+.fb textarea{min-height:130px;resize:vertical}
+.fb textarea:focus,.fb input:focus{border-color:rgba(255,140,60,.55)}
+.fb .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.fb .row input{flex:1;min-width:220px}
+.fb button{border:none;cursor:pointer;font:inherit}
+.fb .hp{position:absolute;left:-9999px}
+.fb-status{font-size:14px;color:var(--dim);min-height:20px}
+.fb-status.ok{color:#8fe39b}.fb-status.err{color:#ff8f8f}
+
 /* Install */
 .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:40px;counter-reset:s}
 .step{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px;position:relative}
@@ -184,6 +202,7 @@ details p{color:var(--dim);margin-top:10px;max-width:760px}
 
 footer{padding:60px 0 80px;text-align:center;color:var(--dim);font-size:14px}
 footer .big{font-size:42px;font-weight:800;color:var(--fg);margin-bottom:18px;letter-spacing:-1px}
+footer .code{text-align:left}
 
 @media (max-width:900px){
   .hero,.split,.panels{grid-template-columns:1fr}
@@ -275,6 +294,7 @@ footer .big{font-size:42px;font-weight:800;color:var(--fg);margin-bottom:18px;le
           <li><span class="dot">🏠</span><div><b>Visit</b><span>Your fox walks over to their screen.</span></div></li>
           <li><span class="dot">🎮</span><div><b>Play</b><span>Rock Paper Scissors or a race.</span></div></li>
         </ul>
+        <div class="code"><div><small>Add me</small><b>FOX-RRY7PJ</b></div><button class="copy" data-copy="FOX-RRY7PJ">Copy</button></div>
       </div>
       <div class="arena" aria-hidden="true">
         <div class="ground"></div>
@@ -295,6 +315,21 @@ footer .big{font-size:42px;font-weight:800;color:var(--fg);margin-bottom:18px;le
     </div>
   </section>
 
+  <section id="feedback">
+    <span class="eyebrow">Feedback</span>
+    <h2>Tell me what you think.</h2>
+    <p class="sub">Bugs, ideas, anything.</p>
+    <form class="fb" id="fb">
+      <textarea name="msg" maxlength="2000" placeholder="Your message" required></textarea>
+      <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <div class="row">
+        <input name="email" type="email" maxlength="120" placeholder="Email (optional, if you'd like a reply)">
+        <button class="btn primary" type="submit">Send</button>
+      </div>
+      <div class="fb-status" id="fbs"></div>
+    </form>
+  </section>
+
   <section id="faq">
     <span class="eyebrow">Questions</span>
     <h2>Good to know</h2>
@@ -308,6 +343,7 @@ footer .big{font-size:42px;font-weight:800;color:var(--fg);margin-bottom:18px;le
 <footer>
   <div class="big">Come say hi.</div>
   <a class="btn primary" id="dl2" href="#">⬇ Download Foxy</a>
+  <div><div class="code"><div><small>My friend code</small><b>FOX-RRY7PJ</b></div><button class="copy" data-copy="FOX-RRY7PJ">Copy</button></div></div>
   <p style="margin-top:26px"><a id="gh" href="#">GitHub</a></p>
 </footer>
 
@@ -318,6 +354,32 @@ for (const id of ["dl", "dl2"]) document.getElementById(id).href = exe;
 document.getElementById("gh").href = `https://github.com/${OWNER}/${REPO}/releases`;
 fetch(`https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`).then(r => r.ok ? r.json() : null)
   .then(j => { if (j && j.tag_name) document.getElementById("ver").textContent = "Version " + j.tag_name.replace(/^v/, ""); }).catch(() => {});
+// Friend code: copy
+for (const b of document.querySelectorAll(".copy")) b.onclick = async () => {
+  try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied!"; }
+  catch { b.textContent = b.dataset.copy; }
+  setTimeout(() => b.textContent = "Copy", 1600);
+};
+// Feedback
+const RELAY = "https://foxy-relay.redbullhater1.workers.dev";
+const fb = document.getElementById("fb"), fbs = document.getElementById("fbs");
+if (!/^https?:\/\//.test(RELAY)) document.getElementById("feedback").style.display = "none";
+fb.onsubmit = async (e) => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(fb));
+  const btn = fb.querySelector("button");
+  btn.disabled = true; fbs.className = "fb-status"; fbs.textContent = "Sending…";
+  try {
+    const r = await fetch(RELAY + "/feedback", { method: "POST", headers: { "content-type": "text/plain" }, body: JSON.stringify(d) });
+    const j = await r.json();
+    if (j.ok) { fb.reset(); fbs.className = "fb-status ok"; fbs.textContent = "Thanks! Got it."; }
+    else {
+      fbs.className = "fb-status err";
+      fbs.textContent = j.error === "email" ? "That email doesn't look right." : j.error === "busy" ? "Too many messages, try again later." : "Couldn't send it.";
+    }
+  } catch { fbs.className = "fb-status err"; fbs.textContent = "Couldn't send it. Try again later."; }
+  btn.disabled = false;
+};
 const PRESETS = [[[0, 0, 0], [255, 140, 60]], [[38, 38, 44], [120, 190, 255]], [[16, 28, 64], [110, 200, 255]], [[52, 24, 84], [230, 150, 255]], [[18, 52, 36], [150, 230, 140]], [[78, 18, 30], [255, 170, 120]], [[150, 66, 18], [255, 230, 190]], [[240, 240, 244], [235, 110, 40]]];
 const clock = () => { const t = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); document.querySelectorAll(".clock").forEach(e => e.textContent = t); };
 clock(); setInterval(clock, 10000);
