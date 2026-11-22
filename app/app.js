@@ -9,6 +9,8 @@ const RELAY = (RELAY_RAW.startsWith("__")
 ).replace(/\/+$/, "");
 
 const $ = (id) => document.getElementById(id);
+// Inside the Android app (it adds real notifications through Firebase)
+const NATIVE = !!window.FoxyNative;
 const DPR = () => Math.min(window.devicePixelRatio || 1, 3);
 const now = () => performance.now() / 1000;
 const buzz = (p) => {
@@ -96,7 +98,7 @@ function saveCreds() {
 }
 
 function clearCreds() {
-  for (const k of ["foxy_id", "foxy_ptoken", "foxy_name", "foxy_skin", "foxy_acc"]) localStorage.removeItem(k);
+  for (const k of ["foxy_id", "foxy_ptoken", "foxy_name", "foxy_skin", "foxy_acc", "foxy_fcm"]) localStorage.removeItem(k);
   if ("caches" in window) caches.delete("foxy-cred").catch(() => {});
   S.id = S.token = "";
   S.friends = [];
@@ -182,7 +184,9 @@ document.addEventListener("visibilitychange", () => {
 function onMessage(m) {
   switch (m.t) {
     case "m_me":
-      S.me = { ...S.me, name: m.name, code: m.code, skin: m.skin | 0, acc: m.acc | 0, notify: !!m.notify, push: !!m.push };
+      S.me = { ...S.me, name: m.name, code: m.code, skin: m.skin | 0, acc: m.acc | 0, notify: !!m.notify, push: !!m.push, fcmok: !!m.fcmok };
+      // Android app: the Firebase token can change; keep the server's copy fresh
+      if (NATIVE && m.notify && m.push) sendNativeToken(FoxyNative.pushToken());
       localStorage.setItem("foxy_name", m.name);
       localStorage.setItem("foxy_skin", S.me.skin);
       localStorage.setItem("foxy_acc", S.me.acc);
@@ -546,7 +550,7 @@ function standalone() {
 }
 
 function updateNotifyToggle() {
-  const granted = "Notification" in window && Notification.permission === "granted";
+  const granted = NATIVE ? FoxyNative.notifyPermission() === "granted" : "Notification" in window && Notification.permission === "granted";
   $("notifyToggle").checked = S.me.notify && S.me.push && granted;
 }
 
@@ -570,6 +574,12 @@ $("notifyToggle").addEventListener("change", async (e) => {
     return;
   }
   e.target.checked = false;
+  if (NATIVE) {
+    if (!S.me.fcmok) return notifyNote("Notifications aren't ready on the server yet");
+    nativeWant = true;
+    FoxyNative.requestNotify();
+    return;
+  }
   if (isIOS() && !standalone()) return notifyNote("Add Foxy to your Home Screen first (Share › Add to Home Screen)");
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return notifyNote("This browser can't show notifications");
   const perm = await Notification.requestPermission();
@@ -588,6 +598,53 @@ $("notifyToggle").addEventListener("change", async (e) => {
     notifyNote("Couldn't turn on notifications");
   }
 });
+
+// ---- Android app ----
+let nativeWant = false;
+
+function sendNativeToken(tok) {
+  if (!tok || tok === localStorage.getItem("foxy_fcm")) return;
+  send({ t: "m_push", fcm: tok, notify: true });
+  localStorage.setItem("foxy_fcm", tok);
+}
+
+// Android answered the notification permission
+window.foxyNativeNotify = (state) => {
+  if (!nativeWant) return updateNotifyToggle();
+  if (state !== "granted") {
+    nativeWant = false;
+    notifyNote("Notifications are off for Foxy in Android settings");
+    FoxyNative.openNotifySettings();
+    return;
+  }
+  const tok = FoxyNative.pushToken();
+  if (tok) finishNative(tok);
+};
+
+// Firebase gave a token (at start, or after the permission)
+window.foxyNativeToken = (tok) => {
+  if (nativeWant) return finishNative(tok);
+  if (S.me.notify && S.me.push) sendNativeToken(tok);
+};
+
+function finishNative(tok) {
+  nativeWant = false;
+  localStorage.removeItem("foxy_fcm");
+  sendNativeToken(tok);
+  S.me.notify = S.me.push = true;
+  $("notifyToggle").checked = true;
+}
+
+// The app went to the background / came back
+window.foxyNativeVisible = (visible) => {
+  if (!visible) {
+    flushPokes(true);
+    disconnect();
+  } else if (S.id) {
+    connect();
+    updateNotifyToggle();
+  }
+};
 
 $("unlinkBtn").addEventListener("click", () => {
   if (!confirm("Unlink this phone from your Foxy?")) return;
@@ -1020,7 +1077,7 @@ function drawParticles(x, dt) {
 
 // ---------------- Start ----------------
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if (!NATIVE && "serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 if (S.id && S.token) {
   showMain();
