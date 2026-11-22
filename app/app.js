@@ -23,6 +23,8 @@ const S = {
   token: localStorage.getItem("foxy_ptoken") || "",
   me: { name: localStorage.getItem("foxy_name") || "", code: "", skin: +(localStorage.getItem("foxy_skin") || 0), acc: +(localStorage.getItem("foxy_acc") || 0), notify: false, push: false },
   friends: [],
+  reqs: [], // [{id, name}] asking to be our friend
+  sent: [], // our requests waiting for an answer
   notes: [],
   unread: 0,
   view: "home", // home | friends | friend
@@ -200,6 +202,31 @@ function onMessage(m) {
       renderFriends();
       renderHeader();
       break;
+    case "m_reqs":
+      S.reqs = m.list || [];
+      S.sent = m.sent || [];
+      renderReqs();
+      break;
+    case "x_add": {
+      const msg = $("addMsg");
+      const errs = { not_found: "No one has that code", self: "That's your own code", already: "You're already friends", full: "Your friend list is full", their_full: "Their friend list is full" };
+      if (m.err) {
+        msg.textContent = errs[m.err] || "Couldn't send the request";
+        msg.className = "add-msg err";
+      } else {
+        msg.textContent = `Request sent to ${m.name}`;
+        msg.className = "add-msg ok";
+        $("addInput").value = "";
+      }
+      break;
+    }
+    case "x_friend": {
+      const msg = $("addMsg");
+      msg.textContent = `You're now friends with ${m.name}`;
+      msg.className = "add-msg ok";
+      $("addInput").value = "";
+      break;
+    }
     case "m_notes":
       S.notes = m.list || [];
       S.unread = S.panel === "notes" ? 0 : m.unread | 0;
@@ -418,10 +445,11 @@ function setView(v, friendId = null, silent = false) {
   $("btnBack").classList.toggle("hidden", v !== "friend");
   $("btnBell").classList.toggle("hidden", v === "friend");
   $("topStreak").classList.toggle("hidden", v !== "friend");
+  $("btnMore").classList.toggle("hidden", v !== "friend");
   const tab = $("tabBtn");
   tab.innerHTML = v === "friends"
     ? '<svg><use href="#i-home"/></svg><span>My fox</span>'
-    : '<svg><use href="#i-friends"/></svg><span>Friends</span>';
+    : '<svg><use href="#i-friends"/></svg><span>Friends</span>' + (S.reqs.length ? '<i class="dot-new"></i>' : "");
   if (v !== was) resetPet();
   combo.reset();
   renderHeader();
@@ -457,7 +485,6 @@ function renderFriends() {
   const list = $("friendList");
   const fr = [...S.friends].sort((a, b) => (pokeable(b) - pokeable(a)) || (b.online - a.online) || a.name.localeCompare(b.name));
   $("friendCount").textContent = S.friends.length ? S.friends.length : "";
-  $("noFriends").classList.toggle("hidden", S.friends.length > 0);
   list.innerHTML = "";
   for (const f of fr) {
     const [label, col] = statusOf(f);
@@ -468,7 +495,109 @@ function renderFriends() {
     row.addEventListener("click", () => openFriend(f.id));
     list.appendChild(row);
   }
+  renderReqs();
 }
+
+function renderReqs() {
+  const box = $("reqList");
+  box.innerHTML = "";
+  const section = (title) => {
+    const h = document.createElement("div");
+    h.className = "sec";
+    h.textContent = title;
+    box.appendChild(h);
+  };
+  if (S.reqs.length) section("Requests");
+  for (const r of S.reqs) {
+    const row = document.createElement("div");
+    row.className = "rrow";
+    row.innerHTML = `<b>${esc(r.name)}</b><button class="rbtn" aria-label="Decline"><svg><use href="#i-close"/></svg></button><button class="rbtn yes" aria-label="Accept"><svg><use href="#i-check"/></svg></button>`;
+    const [no, yes] = row.querySelectorAll("button");
+    yes.addEventListener("click", () => send({ t: "x_accept", to: r.id }));
+    no.addEventListener("click", () => send({ t: "x_decline", to: r.id }));
+    box.appendChild(row);
+  }
+  if (S.sent.length) section("Sent");
+  for (const r of S.sent) {
+    const row = document.createElement("div");
+    row.className = "rrow";
+    row.innerHTML = `<b>${esc(r.name)}</b><small>Waiting</small><button class="rbtn" aria-label="Cancel"><svg><use href="#i-close"/></svg></button>`;
+    row.querySelector("button").addEventListener("click", () => send({ t: "x_cancel", to: r.id }));
+    box.appendChild(row);
+  }
+  if (S.friends.length && (S.reqs.length || S.sent.length)) section("Friends");
+  $("noFriends").classList.toggle("hidden", S.friends.length > 0 || S.reqs.length > 0 || S.sent.length > 0);
+  // The red dot on the Friends button
+  if (S.view !== "friends") {
+    const tab = $("tabBtn");
+    const dot = tab.querySelector(".dot-new");
+    if (S.reqs.length && !dot) tab.insertAdjacentHTML("beforeend", '<i class="dot-new"></i>');
+    if (!S.reqs.length && dot) dot.remove();
+  }
+}
+
+/** Copies text (Android WebView may not have the clipboard API) */
+async function copyText(t) {
+  try {
+    await navigator.clipboard.writeText(t);
+    return true;
+  } catch {}
+  const ta = document.createElement("textarea");
+  ta.value = t;
+  ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;user-select:text;-webkit-user-select:text";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch {}
+  ta.remove();
+  return ok;
+}
+
+async function copyCode(el) {
+  const b = el.querySelector("b");
+  const code = S.me.code;
+  if (!code || el.classList.contains("copied")) return;
+  if (await copyText(code)) {
+    el.classList.add("copied");
+    b.textContent = "Copied!";
+    buzz(10);
+    setTimeout(() => {
+      el.classList.remove("copied");
+      b.textContent = S.me.code;
+    }, 1400);
+  }
+}
+
+$("codeRow").addEventListener("click", () => copyCode($("codeRow")));
+$("myCode").addEventListener("click", () => copyCode($("myCode")));
+
+$("btnAdd").addEventListener("click", () => {
+  const card = $("addCard");
+  card.classList.toggle("hidden");
+  $("myCode").querySelector("b").textContent = S.me.code;
+  $("addMsg").textContent = "";
+  if (!card.classList.contains("hidden")) $("addInput").focus();
+});
+
+$("addCard").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const code = $("addInput").value.trim();
+  if (!code) return;
+  $("addMsg").textContent = "Sending…";
+  $("addMsg").className = "add-msg";
+  send({ t: "x_add", code });
+  $("addInput").blur();
+});
+
+$("btnMore").addEventListener("click", () => {
+  const f = friendById(S.friend);
+  if (!f || !confirm(`Remove ${f.name} from your friends?`)) return;
+  send({ t: "x_remove", to: f.id });
+  S.friends = S.friends.filter((x) => x.id !== f.id);
+  renderFriends();
+  history.back();
+});
 
 function openFriend(id) {
   if (S.view === "friends") {
