@@ -79,7 +79,7 @@ function paintMini(cv, skin, acc, sleeping, css) {
   const x = cv.getContext("2d");
   x.setTransform(d, 0, 0, d, 0, 0);
   x.clearRect(0, 0, css, css);
-  const extra = acc ? 0.12 : 0;
+  const extra = acc >= 31 || skin >= 16 ? 0.2 : acc ? 0.12 : 0;
   drawFox(x, css / 2, css * (0.56 + extra * 0.4), css * (0.78 - extra), 1.0, { skin, acc, sleeping });
 }
 
