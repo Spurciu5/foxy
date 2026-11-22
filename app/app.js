@@ -635,6 +635,49 @@ function finishNative(tok) {
   $("notifyToggle").checked = true;
 }
 
+// A newer Android app (android.bat publishes phone.json next to this page)
+let updInfo = null;
+
+async function checkAppUpdate() {
+  if (!NATIVE || !FoxyNative.versionCode) return;
+  try {
+    const j = await (await fetch("phone.json?" + Date.now(), { cache: "no-store" })).json();
+    if (j && j.vc > FoxyNative.versionCode() && /^https:\/\//.test(j.url)) {
+      updInfo = j;
+      $("updText").textContent = `Foxy ${j.vn} is out`;
+      $("updBtn").disabled = false;
+      $("updBtn").textContent = "Update";
+      $("upd").classList.remove("hidden");
+    }
+  } catch {}
+}
+
+$("updBtn").addEventListener("click", () => {
+  if (!updInfo) return;
+  $("updBtn").disabled = true;
+  $("updBtn").textContent = "0%";
+  FoxyNative.installUpdate(updInfo.url);
+});
+
+// Download progress from the app: a number, "done", "allow" (Android asks first) or "error"
+window.foxyNativeUpdate = (st) => {
+  const b = $("updBtn");
+  if (st === "done") {
+    b.textContent = "Install";
+    b.disabled = false;
+  } else if (st === "allow") {
+    $("updText").textContent = "Allow Foxy to install updates, then tap again";
+    b.textContent = "Update";
+    b.disabled = false;
+  } else if (st === "error") {
+    $("updText").textContent = "Couldn't download the update";
+    b.textContent = "Retry";
+    b.disabled = false;
+  } else {
+    b.textContent = st + "%";
+  }
+};
+
 // The app went to the background / came back
 window.foxyNativeVisible = (visible) => {
   if (!visible) {
@@ -643,6 +686,7 @@ window.foxyNativeVisible = (visible) => {
   } else if (S.id) {
     connect();
     updateNotifyToggle();
+    checkAppUpdate();
   }
 };
 
@@ -1086,4 +1130,5 @@ if (S.id && S.token) {
 } else {
   showLink();
 }
+checkAppUpdate();
 requestAnimationFrame(frame);
