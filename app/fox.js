@@ -227,22 +227,46 @@ function sparkles(ctx, skin, t, a) {
   }
 }
 
-function accessory(ctx, acc, t, a) {
-  if (acc === 14) {
-    const bob = Math.sin(t * 2) * 0.04;
-    for (const [col, w] of [[`rgba(255,220,90,${0.35 * a})`, 0.16], [`rgba(255,214,80,${a})`, 0.07]]) {
-      ctx.beginPath();
-      ctx.ellipse(0, -1.2 + bob, 0.42, 0.12, 0, 0, TAU);
-      ctx.strokeStyle = col;
-      ctx.lineWidth = w;
-      ctx.stroke();
-    }
-    return;
-  }
-  const shapes = ACCS[acc];
-  if (!shapes) return;
+/** Paint: a color [r,g,b,a] or a gradient {lin|rad:[...], stops:[[pos,[r,g,b,a]],...]} (head coordinates) */
+function paint(ctx, p, a) {
+  if (Array.isArray(p)) return rgba(p, a);
+  const g = p.lin
+    ? ctx.createLinearGradient(p.lin[0], p.lin[1], p.lin[2], p.lin[3])
+    : ctx.createRadialGradient(p.rad[0], p.rad[1], 0, p.rad[0], p.rad[1], Math.max(p.rad[2], p.rad[3]));
+  for (const [pos, c] of p.stops) g.addColorStop(Math.min(1, Math.max(0, pos)), rgba(c, a));
+  return g;
+}
+
+const sinT = (v, t) => (v ? v[0] * Math.sin(t * v[1] + v[2]) : 0);
+
+/** Draws generated shapes (accessories, skin layers), with animated groups */
+function drawShapes(ctx, shapes, t, a) {
   for (const s of shapes) {
-    const col = rgba(s[1], a);
+    if (s[0] === "group") {
+      const g = s[1];
+      const [cx, cy] = g.c || [0, 0];
+      let ang = (g.angle || 0) + (g.spin ? (t * g.spin) % TAU : 0) + sinT(g.rot, t);
+      const k = 1 + sinT(g.scale, t);
+      const [sx, sy] = g.sxy || [1, 1];
+      let dx = 0, dy = 0;
+      if (g.move) {
+        const m = g.move;
+        const w = Math.sin(t * m[2] + m[3]);
+        dx = m[0] * w;
+        dy = m[1] * w;
+      }
+      let ga = a;
+      if (g.fade) ga = a * (g.fade[0] + (g.fade[1] - g.fade[0]) * (0.5 + 0.5 * Math.sin(t * g.fade[2] + g.fade[3])));
+      ctx.save();
+      ctx.translate(cx + dx, cy + dy);
+      ctx.rotate(ang);
+      ctx.scale(sx * k, sy * k);
+      ctx.translate(-cx, -cy);
+      drawShapes(ctx, s[2], t, ga);
+      ctx.restore();
+      continue;
+    }
+    const col = paint(ctx, s[1], a);
     switch (s[0]) {
       case "path":
         fillPath(ctx, col, (c) => runCmds(c, s[2]));
@@ -267,6 +291,21 @@ function accessory(ctx, acc, t, a) {
         break;
     }
   }
+}
+
+function accessory(ctx, acc, t, a) {
+  if (acc === 14) {
+    const bob = Math.sin(t * 2) * 0.04;
+    for (const [col, w] of [[`rgba(255,220,90,${0.35 * a})`, 0.16], [`rgba(255,214,80,${a})`, 0.07]]) {
+      ctx.beginPath();
+      ctx.ellipse(0, -1.2 + bob, 0.42, 0.12, 0, 0, TAU);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.stroke();
+    }
+    return;
+  }
+  if (ACCS[acc]) drawShapes(ctx, ACCS[acc], t, a);
 }
 
 /**
@@ -327,6 +366,17 @@ function drawFox(ctx, cx, cy, size, t, m = {}) {
   ctx.scale(sx, sy);
   const lw = (w, px) => Math.max(w, px / u);
 
+  const skin = m.skin | 0;
+  const fx = typeof SKIN_FX !== "undefined" ? SKIN_FX[skin] : null;
+  if (fx) drawShapes(ctx, fx.back, t, a);
+  if (m.acc && typeof ACCS_BACK !== "undefined" && ACCS_BACK[m.acc]) drawShapes(ctx, ACCS_BACK[m.acc], t, a);
+  // Gradient fur on the endgame skins
+  let furFill = fur;
+  if (pal.fur2) {
+    furFill = ctx.createLinearGradient(0, -0.75, 0, 0.8);
+    furFill.addColorStop(0, fur);
+    furFill.addColorStop(1, rgba(pal.fur2, a));
+  }
   // Ears (rounded tips), each can twitch around its base
   for (const s of [-1, 1]) {
     const tw = (s < 0 ? m.earL : m.earR) || 0;
@@ -344,10 +394,11 @@ function drawFox(ctx, cx, cy, size, t, m = {}) {
       c.quadraticCurveTo(s * 0.78, -0.8, s * 0.6, -0.84);
       c.quadraticCurveTo(s * 0.46, -0.72, s * 0.34, -0.55);
     });
+    if (fx) drawShapes(ctx, s < 0 ? fx.earL : fx.earR, t, a);
     ctx.restore();
   }
   // Head
-  fillPath(ctx, fur, (c) => {
+  fillPath(ctx, furFill, (c) => {
     c.moveTo(-0.92, 0.05);
     c.bezierCurveTo(-0.95, -0.78, 0.95, -0.78, 0.92, 0.05);
     c.bezierCurveTo(0.98, 0.3, 0.8, 0.42, 0.7, 0.46);
@@ -357,7 +408,7 @@ function drawFox(ctx, cx, cy, size, t, m = {}) {
   // Cheek fluff (pushed in a little on the side being squished)
   for (const s of [-1, 1]) {
     const sq = m.squish && Math.sign(m.squish) === s ? Math.abs(m.squish) * 0.08 : 0;
-    fillPath(ctx, fur, (c) => {
+    fillPath(ctx, furFill, (c) => {
       c.moveTo(s * (0.86 - sq), 0.18);
       c.lineTo(s * (1.02 - sq), 0.3);
       c.lineTo(s * (0.84 - sq), 0.36);
@@ -373,6 +424,7 @@ function drawFox(ctx, cx, cy, size, t, m = {}) {
     c.bezierCurveTo(0.66, 0.62, 0.32, 0.76, 0, 0.76);
     c.bezierCurveTo(-0.32, 0.76, -0.66, 0.62, -0.74, 0.24);
   });
+  if (fx) drawShapes(ctx, fx.marks, t, a);
   // Cheeks
   const bl = Math.max(Math.min(1, m.blush || 0), hug, angry * 0.6);
   const cheekC = lerpCol([255, 150, 160], [255, 84, 112], bl);
@@ -412,6 +464,12 @@ function drawFox(ctx, cx, cy, size, t, m = {}) {
       const big = 1 + (m.surprise || 0) * 0.18;
       const lx = (m.lookX || 0) * 0.04, ly = (m.lookY || 0) * 0.04;
       ellipse(ctx, ex + lx * 0.5, ey + ly * 0.5, 0.135 * big, 0.17 * big, ink);
+      if (pal.iris) {
+        const ig = ctx.createLinearGradient(0, ey - 0.1, 0, ey + 0.15);
+        ig.addColorStop(0, ink);
+        ig.addColorStop(1, rgba(pal.iris, a));
+        ellipse(ctx, ex + lx * 0.5, ey + 0.02 + ly * 0.5, 0.11 * big, 0.135 * big, ig);
+      }
       circle(ctx, ex + 0.045 + lx, ey - 0.06 + ly, 0.06 * big, `rgba(255,255,255,${a})`);
       circle(ctx, ex - 0.04 + lx, ey + 0.06 + ly, 0.028, `rgba(255,255,255,${a})`);
       if (angry > 0.3) {
@@ -459,7 +517,8 @@ function drawFox(ctx, cx, cy, size, t, m = {}) {
       });
     }
   }
-  sparkles(ctx, m.skin | 0, t, a);
+  sparkles(ctx, skin, t, a);
+  if (fx) drawShapes(ctx, fx.front, t, a);
   if (m.acc) accessory(ctx, m.acc, t, a);
   ctx.restore();
 }
