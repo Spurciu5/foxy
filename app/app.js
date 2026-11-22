@@ -590,9 +590,33 @@ $("addCard").addEventListener("submit", (e) => {
   $("addInput").blur();
 });
 
-$("btnMore").addEventListener("click", () => {
+/** Asks yes or no with the app's own card (resolves true for yes) */
+function ask(text, yesLabel) {
+  return new Promise((done) => {
+    $("askText").textContent = text;
+    $("askYes").textContent = yesLabel;
+    const box = $("ask");
+    box.classList.remove("hidden");
+    const finish = (v) => {
+      box.classList.add("hidden");
+      $("askYes").onclick = $("askNo").onclick = box.onclick = null;
+      done(v);
+    };
+    $("askYes").onclick = (e) => {
+      e.stopPropagation();
+      finish(true);
+    };
+    $("askNo").onclick = (e) => {
+      e.stopPropagation();
+      finish(false);
+    };
+    box.onclick = (e) => e.target === box && finish(false);
+  });
+}
+
+$("btnMore").addEventListener("click", async () => {
   const f = friendById(S.friend);
-  if (!f || !confirm(`Remove ${f.name} from your friends?`)) return;
+  if (!f || !(await ask(`Remove ${f.name} from your friends?`, "Remove"))) return;
   send({ t: "x_remove", to: f.id });
   S.friends = S.friends.filter((x) => x.id !== f.id);
   renderFriends();
@@ -819,8 +843,8 @@ window.foxyNativeVisible = (visible) => {
   }
 };
 
-$("unlinkBtn").addEventListener("click", () => {
-  if (!confirm("Unlink this phone from your Foxy?")) return;
+$("unlinkBtn").addEventListener("click", async () => {
+  if (!(await ask("Unlink this phone from your Foxy?", "Unlink"))) return;
   send({ t: "m_unlink" });
   setTimeout(unlinked, 300);
 });
