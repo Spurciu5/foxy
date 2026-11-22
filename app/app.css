@@ -218,3 +218,13 @@ svg { width: 24px; height: 24px; display: block; }
 #tabBtn .dot-new { width: 9px; height: 9px; border-radius: 50%; background: var(--red); margin-left: -4px; align-self: flex-start; margin-top: 14px; }
 button.row { width: 100%; text-align: left; }
 .copied b { color: var(--green) !important; }
+
+/* ---- Yes / no question (Android's WebView shows no confirm() dialogs) ---- */
+.ask { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px; background: rgba(5, 5, 15, 0.55); animation: fade .2s; }
+.ask-card { width: min(100%, 340px); padding: 22px 18px 16px; border-radius: 24px; background: #20213f; border: 1px solid var(--line); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5); animation: rise .25s cubic-bezier(.2, 1.2, .3, 1); }
+.ask-card p { margin: 0 6px 18px; font-size: 17px; font-weight: 700; text-align: center; line-height: 1.35; }
+.ask-row { display: flex; gap: 10px; }
+.ask-row button { flex: 1; height: 50px; border-radius: 16px; font-weight: 800; font-size: 16px; background: rgba(255, 255, 255, 0.08); }
+.ask-row button.danger { background: rgba(255, 95, 109, 0.16); color: var(--red); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { transform: translateY(16px) scale(0.96); opacity: 0; } }
